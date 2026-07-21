@@ -5,6 +5,7 @@ Visualizes and de-risks Microsoft Entra ID **dynamic group** rules:
 - **Rule-tree parsing** — turn a long `-and`/`-or`/`-not` condition string into a readable tree
 - **Bulk rule simulation** — test a rule against thousands of users at once (native admin center caps this at 20)
 - **Blast-radius mapping** — find every Conditional Access policy, license assignment, app role assignment, and PIM eligibility that depends on a group
+- **SVG relationship report** — render a group's blast radius as a standalone, shareable diagram
 - **Snapshot/diff versioning** — export dynamic group rules to JSON, commit to Git, diff between runs
 
 This is a v0.1 prototype. See [Limitations](#limitations) before relying on it for production decisions.
@@ -18,6 +19,12 @@ Connect-MgGraph -Scopes 'Group.Read.All','Policy.Read.All','Directory.Read.All',
 
 The module talks to Graph via `Invoke-MgGraphRequest`, so only `Microsoft.Graph.Authentication`
 is a hard dependency — you don't need the full Microsoft.Graph SDK installed.
+
+**PowerShell version**: works on both Windows PowerShell 5.1 and PowerShell 7+ (no PS7-only
+syntax is used anywhere in this module). If you're on Windows PowerShell 5.1, make sure you
+also meet Microsoft's prerequisites for `Microsoft.Graph.Authentication` on that edition:
+.NET Framework 4.7.2+, an up-to-date `PowerShellGet` (`Install-Module PowerShellGet`), and an
+execution policy of `RemoteSigned` or less restrictive.
 
 ## Install
 
@@ -75,7 +82,26 @@ Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' | Format
 Returns Conditional Access references, assigned licenses, app role assignments,
 PIM eligibility, and a rolled-up `RiskLevel` (`None` / `Low` / `Medium` / `High` / `Critical`).
 
-### 4. Snapshot and diff over time
+### 4. Render the blast radius as an SVG report
+
+```powershell
+Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' |
+    Export-EGIGroupBlastRadiusSvg -Path './reports/sales-de-blast-radius.svg'
+```
+
+The group is drawn as a hub on the left; Conditional Access, licenses, app role
+assignments, and PIM eligibility appear as color-coded spoke columns on the
+right, each connected back to the hub. It's a plain, self-contained `.svg`
+file — no external tools needed — so it opens directly in a browser, drops
+into a wiki page, or attaches to a change ticket as evidence of the blast
+radius before a rule change goes live.
+
+For a network view across *many* groups at once (not just one group's
+dependencies), exporting to Graphviz DOT format and letting `dot -Tsvg` do
+the layout scales better than hand-rolled coordinates — open an issue/ask if
+that's needed and it can be added as `Export-EGITenantGroupGraph`.
+
+### 5. Snapshot and diff over time
 
 ```powershell
 Export-EGIGroupSnapshot -Path './snapshots/dynamic-groups.json'
@@ -112,9 +138,12 @@ Before your first publish:
 
 1. Pick a globally unique module name on the Gallery (search first).
 2. Update `Author`, `CompanyName`, `ProjectUri`, `LicenseUri` in the `.psd1`.
-3. Bump `ModuleVersion` for every subsequent publish (semantic versioning; the Gallery
+3. Update the copyright holder name in `LICENSE` and make sure `LicenseUri` points
+   at the real, public URL of that file once it's pushed to your repo (a raw
+   GitHub link works, e.g. `.../raw/main/LICENSE`, as does the regular blob URL).
+4. Bump `ModuleVersion` for every subsequent publish (semantic versioning; the Gallery
    rejects re-publishing the same version).
-4. Run `Invoke-Pester ./Tests` locally first.
+5. Run `Invoke-Pester ./Tests` locally first.
 
 ## Tests
 
