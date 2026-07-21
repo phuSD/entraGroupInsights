@@ -29,7 +29,7 @@
         PSData = @{
             Tags         = @('Entra', 'EntraID', 'AzureAD', 'IdentityGovernance', 'ConditionalAccess', 'DynamicGroups', 'MicrosoftGraph', 'Security')
             LicenseUri   = 'https://opensource.org/licenses/MIT'
-            ProjectUri   = 'https://github.com/yourhandle/EntraGroupInsights'
+            ProjectUri   = 'https://github.com/phuSD/EntraGroupInsights'
             ReleaseNotes = 'Initial 0.1.0 prototype: rule-tree visualization, bulk rule simulation subset, blast-radius mapping, and JSON snapshot/diff for change tracking.'
         }
     }
