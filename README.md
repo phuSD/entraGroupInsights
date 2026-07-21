@@ -34,12 +34,6 @@ Once published:
 Install-Module EntraGroupInsights -Scope CurrentUser
 ```
 
-Locally, before publishing:
-
-```powershell
-Import-Module ./EntraGroupInsights/EntraGroupInsights.psd1
-```
-
 ## Usage
 
 ### 1. Visualize a rule as a tree
@@ -133,17 +127,6 @@ flagged at a high level (`IsTeamsGroup`) but not enumerated in detail yet.
 Test-ModuleManifest -Path ./EntraGroupInsights/EntraGroupInsights.psd1
 Publish-Module -Path ./EntraGroupInsights -NuGetApiKey $env:PSGALLERY_API_KEY -Repository PSGallery
 ```
-
-Before your first publish:
-
-1. Pick a globally unique module name on the Gallery (search first).
-2. Update `Author`, `CompanyName`, `ProjectUri`, `LicenseUri` in the `.psd1`.
-3. Update the copyright holder name in `LICENSE` and make sure `LicenseUri` points
-   at the real, public URL of that file once it's pushed to your repo (a raw
-   GitHub link works, e.g. `.../raw/main/LICENSE`, as does the regular blob URL).
-4. Bump `ModuleVersion` for every subsequent publish (semantic versioning; the Gallery
-   rejects re-publishing the same version).
-5. Run `Invoke-Pester ./Tests` locally first.
 
 ## Tests
 
