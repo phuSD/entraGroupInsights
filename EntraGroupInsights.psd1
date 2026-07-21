@@ -2,9 +2,8 @@
     RootModule        = 'EntraGroupInsights.psm1'
     ModuleVersion     = '0.1.0'
     GUID              = 'e938a2fe-9488-4b2b-a1d4-571d37b33334'
-    Author            = 'Your Name'
-    CompanyName       = 'Unknown'
-    Copyright         = '(c) Your Name. All rights reserved.'
+    Author            = 'Pascal Huber'
+    Copyright         = '(c) Pascal Huber. All rights reserved.'
     Description       = 'Visualizes and analyzes Microsoft Entra ID dynamic group rules: rule-tree parsing, at-scale membership simulation, snapshot/diff versioning, and blast-radius mapping (Conditional Access, license, app role, and PIM dependencies) for a given group.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
@@ -31,8 +30,8 @@
     PrivateData = @{
         PSData = @{
             Tags         = @('Entra', 'EntraID', 'AzureAD', 'IdentityGovernance', 'ConditionalAccess', 'DynamicGroups', 'MicrosoftGraph', 'Security')
-            LicenseUri   = 'https://github.com/yourhandle/EntraGroupInsights/blob/main/LICENSE'
-            ProjectUri   = 'https://github.com/yourhandle/EntraGroupInsights'
+            LicenseUri   = 'https://github.com/phuSD/EntraGroupInsights/blob/main/LICENSE'
+            ProjectUri   = 'https://github.com/phuSD/EntraGroupInsights'
             ReleaseNotes = 'Initial 0.1.0 prototype: rule-tree visualization, bulk rule simulation subset, blast-radius mapping, and JSON snapshot/diff for change tracking.'
         }
     }
