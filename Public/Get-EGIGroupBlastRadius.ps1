@@ -23,7 +23,9 @@ function Get-EGIGroupBlastRadius {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)] [string] $GroupId
+        [Parameter(Mandatory)]
+        [ValidatePattern('^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$')]
+        [string] $GroupId
     )
 
     $group = Invoke-MgGraphRequest -Method GET `
@@ -46,7 +48,9 @@ function Get-EGIGroupBlastRadius {
     }
 
     # --- License assignment on the group itself -------------------------
-    $licenses = @($group.assignedLicenses) | Where-Object { $_.skuId }
+    # Outer @() keeps a single license from unrolling to a bare hashtable,
+    # whose .Count would be its key count rather than 1.
+    $licenses = @(@($group.assignedLicenses) | Where-Object { $_.skuId })
 
     # --- Application role assignments (enterprise app access) -----------
     $appRoleAssignments = try {
@@ -77,7 +81,7 @@ function Get-EGIGroupBlastRadius {
         { $totalDependencies -eq 0 } { 'None'; break }
         { @($pimEligibility).Count -gt 0 -or ($caMatches | Where-Object State -EQ 'enabled') } { 'Critical'; break }
         { $totalDependencies -ge 3 } { 'High'; break }
-        { $totalDependencies -ge 1 } { 'Medium'; break }
+        { $totalDependencies -ge 2 } { 'Medium'; break }
         default { 'Low' }
     }
 

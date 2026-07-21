@@ -28,6 +28,7 @@ function Get-EGIDynamicGroupRuleTree {
     [CmdletBinding(DefaultParameterSetName = 'ByGroupId')]
     param(
         [Parameter(Mandatory, ParameterSetName = 'ByGroupId')]
+        [ValidatePattern('^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$')]
         [string] $GroupId,
 
         [Parameter(Mandatory, ParameterSetName = 'ByRule')]

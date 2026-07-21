@@ -21,8 +21,10 @@ function Export-EGIGroupSnapshot {
         [Parameter(Mandatory)] [string] $Path
     )
 
-    $uri = "https://graph.microsoft.com/v1.0/groups?`$filter=groupTypes/any(c:c eq 'DynamicMembership')&`$select=id,displayName,membershipRule,membershipRuleProcessingState,isAssignableToRole"
-    $groups = Invoke-EGIGraphPaged -Uri $uri
+    # Filtering on groupTypes/any(...) is a Graph "advanced query": it requires
+    # $count=true plus the ConsistencyLevel:eventual header on every page.
+    $uri = "https://graph.microsoft.com/v1.0/groups?`$filter=groupTypes/any(c:c eq 'DynamicMembership')&`$count=true&`$select=id,displayName,membershipRule,membershipRuleProcessingState,isAssignableToRole"
+    $groups = Invoke-EGIGraphPaged -Uri $uri -Headers @{ ConsistencyLevel = 'eventual' }
 
     $snapshot = [pscustomobject]@{
         CapturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -38,7 +40,11 @@ function Export-EGIGroupSnapshot {
             } | Sort-Object GroupId)
     }
 
-    $snapshot | ConvertTo-Json -Depth 6 | Set-Content -Path $Path -Encoding utf8
+    # BOM-less UTF-8 regardless of PowerShell edition (5.1's Set-Content writes a
+    # BOM), so snapshots committed from different hosts diff cleanly in Git.
+    $json = ($snapshot | ConvertTo-Json -Depth 6) + "`n"
+    $resolvedPath = $PSCmdlet.GetUnresolvedProviderPathFromPSPath($Path)
+    [System.IO.File]::WriteAllText($resolvedPath, $json, [System.Text.UTF8Encoding]::new($false))
     Write-Verbose "Wrote snapshot of $($snapshot.GroupCount) dynamic group(s) to $Path"
     return $snapshot
 }

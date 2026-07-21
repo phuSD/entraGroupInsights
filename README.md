@@ -116,6 +116,12 @@ and a best-effort `-any(...)` handling. It does **not** simulate:
 Leaves using these raise a clear error per user rather than silently returning a wrong
 match/no-match — check the `Error` column in `Test-EGIDynamicGroupRule`'s output.
 
+**Operator precedence caveat**: this module parses with conventional precedence
+(`-not` binds tightest, then `-and`, then `-or`), but Microsoft's dynamic-membership
+documentation lists `-or` with *higher* precedence than `-and`. Rules that mix
+`-and` and `-or` at the same parenthesization level are therefore ambiguous, and the
+module emits a warning when it sees one — add explicit parentheses to be safe.
+
 `Get-EGIGroupBlastRadius` currently checks Conditional Access, license assignment, app
 role assignments, and PIM eligibility. Group-based Teams/SharePoint dependencies are
 flagged at a high level (`IsTeamsGroup`) but not enumerated in detail yet.

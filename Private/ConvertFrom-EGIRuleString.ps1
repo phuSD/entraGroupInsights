@@ -7,8 +7,12 @@ function ConvertFrom-EGIRuleString {
         Tokenizes and parses rules of the form used by dynamic group membership,
         e.g. '(user.department -eq "Sales") -and -not (user.jobTitle -startsWith "SDE")'.
 
-        Operator precedence follows Microsoft's documented order (highest to lowest):
-        comparison operators, then -not, then -and, then -or.
+        Operator precedence: this parser binds -not tightest, then -and, then -or
+        (conventional boolean precedence). CAUTION: Microsoft's dynamic-membership
+        documentation lists -or with HIGHER precedence than -and, the opposite of
+        most languages. Because real-world rules almost always parenthesize, this
+        parser emits a warning whenever -and and -or are mixed at the same
+        parenthesization level instead of silently picking one interpretation.
 
         LIMITATION: the body of an -any(...) / -all(...) lambda (e.g.
         'user.proxyAddresses -any (_ -startsWith "SMTP:")') is treated as an opaque
@@ -53,7 +57,13 @@ function ConvertFrom-EGIRuleString {
     while ($i -lt $n) {
         $rest = $Rule.Substring($i)
 
-        if ($Rule[$i] -match '\s') { $i++; continue }
+        if ($Rule[$i] -match '\s') {
+            # Keep whitespace inside an atom ('user.department -eq "Sales"');
+            # leading/trailing runs are trimmed when the atom completes.
+            if ($atomState.Buffer.Length -gt 0) { $atomState.Buffer += $Rule[$i] }
+            $i++
+            continue
+        }
 
         if ($Rule[$i] -eq '(') {
             # Is this an -any( / -all( lambda body? If the atom buffer just ended
@@ -62,10 +72,17 @@ function ConvertFrom-EGIRuleString {
                 $depth = 1
                 $j = $i + 1
                 while ($j -lt $n -and $depth -gt 0) {
-                    if ($Rule[$j] -eq '(') { $depth++ }
-                    elseif ($Rule[$j] -eq ')') { $depth-- }
+                    $ch = $Rule[$j]
+                    if ($ch -eq '"' -or $ch -eq "'") {
+                        # Skip quoted sections so parens inside values don't affect depth.
+                        $j++
+                        while ($j -lt $n -and $Rule[$j] -ne $ch) { $j++ }
+                    }
+                    elseif ($ch -eq '(') { $depth++ }
+                    elseif ($ch -eq ')') { $depth-- }
                     $j++
                 }
+                $j = [Math]::Min($j, $n)
                 $atomState.Buffer += ' ' + $Rule.Substring($i, $j - $i)
                 $i = $j
                 continue
@@ -120,6 +137,26 @@ function ConvertFrom-EGIRuleString {
 
     if ($tokens.Count -eq 0) {
         throw 'Empty rule string.'
+    }
+
+    # Warn when -and / -or are mixed at the same parenthesization level: this
+    # parser binds -and tighter than -or, but Microsoft's documentation lists
+    # -or above -and, so an unparenthesized mix is ambiguous.
+    $levelOps = [System.Collections.Generic.HashSet[string]]::new()
+    $opStack = [System.Collections.Generic.Stack[object]]::new()
+    $mixed = $false
+    foreach ($t in $tokens) {
+        switch ($t.Type) {
+            'LParen' { $opStack.Push($levelOps); $levelOps = [System.Collections.Generic.HashSet[string]]::new() }
+            'RParen' { if ($opStack.Count -gt 0) { $levelOps = $opStack.Pop() } }
+            'And' { [void]$levelOps.Add('And'); if ($levelOps.Count -gt 1) { $mixed = $true } }
+            'Or' { [void]$levelOps.Add('Or'); if ($levelOps.Count -gt 1) { $mixed = $true } }
+        }
+    }
+    if ($mixed) {
+        Write-Warning ('Rule mixes -and and -or at the same parenthesization level. This parser evaluates -and before -or, ' +
+            "but Microsoft's dynamic-membership documentation lists -or with higher precedence than -and. " +
+            'Add explicit parentheses so the intended grouping is unambiguous.')
     }
 
     # ---- Recursive-descent parser -----------------------------------------

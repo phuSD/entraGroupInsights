@@ -18,13 +18,14 @@ function Test-EGIDynamicGroupRule {
         The raw dynamic membership rule string to test.
 
     .PARAMETER Users
-        An array of user objects. Property names must match the Graph attribute names
-        used in the rule (department, jobTitle, otherMails, employeeId, ...), case-insensitive.
-        Typically produced with:
+        An array of user objects ([pscustomobject] or hashtable). Property names must
+        match the Graph attribute names used in the rule (department, jobTitle,
+        otherMails, employeeId, ...), case-insensitive. Typically produced with:
           Get-MgUser -All -Property Id,DisplayName,Department,JobTitle,UserType,Country
 
     .PARAMETER PassThru
-        Return only the users that match the rule, instead of a full pass/fail table.
+        Return the original user objects that match the rule (with all their
+        properties), instead of the full pass/fail table.
 
     .EXAMPLE
         $users = Get-MgUser -All -Property Id,DisplayName,Department,Country
@@ -39,17 +40,18 @@ function Test-EGIDynamicGroupRule {
 
     $tree = ConvertFrom-EGIRuleString -Rule $Rule
     $results = [System.Collections.Generic.List[pscustomobject]]::new()
+    $matched = [System.Collections.Generic.List[object]]::new()
     $errorCount = 0
 
     foreach ($user in $Users) {
-        $displayName = $null
-        foreach ($p in $user.PSObject.Properties) {
-            if ($p.Name -ieq 'DisplayName') { $displayName = $p.Value }
-        }
+        $id = Get-EGIUserProperty -Obj $user -Name 'Id'
+        $displayName = Get-EGIUserProperty -Obj $user -Name 'DisplayName'
 
         try {
-            $match = Test-EGIRuleTreeNode -Node $tree -User $user
+            $match = if (Test-EGIRuleTreeNode -Node $tree -User $user) { $true } else { $false }
+            if ($match) { $matched.Add($user) }
             $results.Add([pscustomobject]@{
+                    Id          = $id
                     DisplayName = $displayName
                     Matches     = $match
                     Error       = $null
@@ -58,6 +60,7 @@ function Test-EGIDynamicGroupRule {
         catch {
             $errorCount++
             $results.Add([pscustomobject]@{
+                    Id          = $id
                     DisplayName = $displayName
                     Matches     = $null
                     Error       = $_.Exception.Message
@@ -70,7 +73,7 @@ function Test-EGIDynamicGroupRule {
     }
 
     if ($PassThru) {
-        return $results | Where-Object { $_.Matches -eq $true }
+        return $matched.ToArray()
     }
     return $results
 }
