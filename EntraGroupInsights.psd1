@@ -1,6 +1,6 @@
 @{
     RootModule        = 'EntraGroupInsights.psm1'
-    ModuleVersion     = '0.1.0'
+    ModuleVersion     = '0.1.1'
     GUID              = 'e938a2fe-9488-4b2b-a1d4-571d37b33334'
     Author            = 'Pascal Huber'
     Copyright         = '(c) Pascal Huber. All rights reserved.'
