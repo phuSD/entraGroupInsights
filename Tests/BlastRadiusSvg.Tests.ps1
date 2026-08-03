@@ -69,4 +69,50 @@ Describe 'Export-EGIGroupBlastRadiusSvg' {
 
         { [xml](Get-Content -LiteralPath $path -Raw) } | Should -Not -Throw
     }
+
+    It 'rejects -ExampleUser and -ExampleUserId together' {
+        $path = Join-Path $TestDrive 'both.svg'
+        { $script:blastRadius | Export-EGIGroupBlastRadiusSvg -Path $path -ExampleUser @{ DisplayName = 'X' } -ExampleUserId 'x@contoso.com' } |
+            Should -Throw '*either*'
+    }
+
+    Context '-ExampleUserId (looks a real user up via Microsoft Graph)' {
+
+        BeforeAll {
+            Mock -ModuleName EntraGroupInsights Invoke-MgGraphRequest {
+                param($Method, $Uri)
+                $script:lastGraphUri = $Uri
+                if ($Uri -match 'alice') {
+                    return [pscustomobject]@{ id = 'aaaa'; displayName = 'Alice Nguyen'; department = 'Sales'; country = 'DE' }
+                }
+                return [pscustomobject]@{ id = 'bbbb'; displayName = 'Bob Fischer'; department = 'Engineering'; country = 'DE' }
+            }
+        }
+
+        It 'looks the user up by UPN and draws a matching-user node' {
+            $path = Join-Path $TestDrive 'upn-match.svg'
+            $script:blastRadius | Export-EGIGroupBlastRadiusSvg -Path $path -ExampleUserId 'alice.nguyen@contoso.com'
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match 'Alice Nguyen'
+            $svg | Should -Match 'Matches rule'
+            Should -Invoke -ModuleName EntraGroupInsights Invoke-MgGraphRequest -Times 1
+        }
+
+        It 'only requests properties referenced by the membership rule (plus id/displayName)' {
+            $path = Join-Path $TestDrive 'select.svg'
+            $script:blastRadius | Export-EGIGroupBlastRadiusSvg -Path $path -ExampleUserId 'alice.nguyen@contoso.com'
+
+            $script:lastGraphUri | Should -Match '\$select=id,displayName,department,country'
+        }
+
+        It 'draws a non-matching user in red' {
+            $path = Join-Path $TestDrive 'id-no-match.svg'
+            $script:blastRadius | Export-EGIGroupBlastRadiusSvg -Path $path -ExampleUserId '99999999-9999-9999-9999-999999999999'
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match 'Bob Fischer'
+            $svg | Should -Match 'Does not match rule'
+        }
+    }
 }
