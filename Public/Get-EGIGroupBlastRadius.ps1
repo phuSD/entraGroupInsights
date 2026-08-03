@@ -90,6 +90,7 @@ function Get-EGIGroupBlastRadius {
         DisplayName              = $group.displayName
         IsRoleAssignable         = [bool]$group.isAssignableToRole
         IsTeamsGroup             = $isTeamsGroup
+        MembershipRule           = $group.membershipRule
         ConditionalAccessPolicies = @($caMatches)
         AssignedLicenseSkuIds    = @($licenses.skuId)
         AppRoleAssignments       = @($appRoleAssignments | Select-Object resourceDisplayName, appRoleId)
