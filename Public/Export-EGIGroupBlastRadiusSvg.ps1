@@ -13,11 +13,11 @@ function Export-EGIGroupBlastRadiusSvg {
         it is drawn as its own box wired to the hub, so the diagram shows not
         just what depends on the group but why members end up in it.
 
-        Passing -ExampleUser additionally draws a sample user node wired to
-        the hub, evaluated against the membership rule (via
-        Test-EGIRuleTreeNode) and colored green/red depending on whether that
-        user would match - a concrete "would this person be a member"
-        illustration next to the abstract rule text.
+        Passing -ExampleUser (or -ExampleUserId) additionally draws a sample
+        user node wired to the hub, evaluated against the membership rule
+        (via Test-EGIRuleTreeNode) and colored green/red depending on
+        whether that user would match - a concrete "would this person be a
+        member" illustration next to the abstract rule text.
 
         The output is a plain, self-contained .svg file - no external tools or
         libraries required. Open it directly in a browser, embed it in a wiki
@@ -39,6 +39,15 @@ function Export-EGIGroupBlastRadiusSvg {
         $BlastRadius.MembershipRule to illustrate whether that user would be
         a member. Property names must match the Graph attribute names used in
         the rule (department, jobTitle, country, ...), case-insensitive.
+        Mutually exclusive with -ExampleUserId.
+
+    .PARAMETER ExampleUserId
+        Object ID or userPrincipalName of a real user to look up via
+        Microsoft Graph (Connect-MgGraph, at least User.Read.All) and draw
+        the same way as -ExampleUser. Only the properties referenced by
+        $BlastRadius.MembershipRule (plus id/displayName) are requested, so
+        the rule decides what gets fetched. Mutually exclusive with
+        -ExampleUser.
 
     .EXAMPLE
         Get-EGIGroupBlastRadius -GroupId $id | Export-EGIGroupBlastRadiusSvg -Path './report.svg'
@@ -47,6 +56,10 @@ function Export-EGIGroupBlastRadiusSvg {
         $exampleUser = [pscustomobject]@{ DisplayName = 'Alice Nguyen'; department = 'Sales'; country = 'DE' }
         Get-EGIGroupBlastRadius -GroupId $id |
             Export-EGIGroupBlastRadiusSvg -Path './report.svg' -ExampleUser $exampleUser
+
+    .EXAMPLE
+        Get-EGIGroupBlastRadius -GroupId $id |
+            Export-EGIGroupBlastRadiusSvg -Path './report.svg' -ExampleUserId 'alice.nguyen@contoso.com'
     #>
     [CmdletBinding()]
     param(
@@ -56,7 +69,9 @@ function Export-EGIGroupBlastRadiusSvg {
         [Parameter(Mandatory)]
         [string] $Path,
 
-        [object] $ExampleUser
+        [object] $ExampleUser,
+
+        [string] $ExampleUserId
     )
 
     begin {
@@ -72,6 +87,29 @@ function Export-EGIGroupBlastRadiusSvg {
             throw "Export-EGIGroupBlastRadiusSvg received $($received.Count) blast-radius objects, but -Path '$Path' names a single file. Export one group per call (loop and vary -Path for multiple groups)."
         }
         $BlastRadius = $received[0]
+
+        if ($ExampleUser -and $ExampleUserId) {
+            throw "Specify either -ExampleUser or -ExampleUserId, not both."
+        }
+
+        if ($ExampleUserId) {
+            $selectProps = [System.Collections.Generic.List[string]]::new()
+            $selectProps.Add('id')
+            $selectProps.Add('displayName')
+            if (-not [string]::IsNullOrWhiteSpace($BlastRadius.MembershipRule)) {
+                foreach ($m in [regex]::Matches($BlastRadius.MembershipRule, '(?<!\w)user\.([A-Za-z_][A-Za-z0-9_]*)', 'IgnoreCase')) {
+                    $propName = $m.Groups[1].Value
+                    if ($selectProps -notcontains $propName) { $selectProps.Add($propName) }
+                }
+            }
+            try {
+                $ExampleUser = Invoke-MgGraphRequest -Method GET `
+                    -Uri "https://graph.microsoft.com/v1.0/users/$ExampleUserId`?`$select=$($selectProps -join ',')"
+            }
+            catch {
+                throw "Could not fetch example user '$ExampleUserId' from Microsoft Graph: $($_.Exception.Message)"
+            }
+        }
 
         # ---- Build the category list ---------------------------------------
         $categories = @(
