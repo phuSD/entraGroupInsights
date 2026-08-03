@@ -85,10 +85,23 @@ Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' |
 
 The group is drawn as a hub on the left; Conditional Access, licenses, app role
 assignments, and PIM eligibility appear as color-coded spoke columns on the
-right, each connected back to the hub. It's a plain, self-contained `.svg`
-file — no external tools needed — so it opens directly in a browser, drops
-into a wiki page, or attaches to a change ticket as evidence of the blast
-radius before a rule change goes live.
+right, each connected back to the hub. The group's `MembershipRule` (if it's
+a dynamic group) is drawn as its own box wired to the hub, so the diagram
+also shows *why* members end up in the group, not just what depends on it.
+It's a plain, self-contained `.svg` file — no external tools needed — so it
+opens directly in a browser, drops into a wiki page, or attaches to a change
+ticket as evidence of the blast radius before a rule change goes live.
+
+Pass `-ExampleUser` to also draw a sample user node wired to the hub,
+evaluated against the membership rule and colored green/red depending on
+whether that user would be a member:
+
+```powershell
+$exampleUser = [pscustomobject]@{ DisplayName = 'Alice Nguyen'; department = 'Sales'; country = 'DE' }
+
+Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' |
+    Export-EGIGroupBlastRadiusSvg -Path './reports/sales-de-blast-radius.svg' -ExampleUser $exampleUser
+```
 
 For a network view across *many* groups at once (not just one group's
 dependencies), exporting to Graphviz DOT format and letting `dot -Tsvg` do
