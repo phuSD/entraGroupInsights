@@ -103,6 +103,16 @@ Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' |
     Export-EGIGroupBlastRadiusSvg -Path './reports/sales-de-blast-radius.svg' -ExampleUser $exampleUser
 ```
 
+Or skip building the object yourself and pass `-ExampleUserId` with a real
+user's object ID or userPrincipalName — it's looked up via Microsoft Graph,
+requesting only the properties the rule actually references (plus
+id/displayName):
+
+```powershell
+Get-EGIGroupBlastRadius -GroupId '11111111-2222-3333-4444-555555555555' |
+    Export-EGIGroupBlastRadiusSvg -Path './reports/sales-de-blast-radius.svg' -ExampleUserId 'alice.nguyen@contoso.com'
+```
+
 For a network view across *many* groups at once (not just one group's
 dependencies), exporting to Graphviz DOT format and letting `dot -Tsvg` do
 the layout scales better than hand-rolled coordinates — open an issue/ask if
