@@ -9,6 +9,16 @@ function Export-EGIGroupBlastRadiusSvg {
         assignments, PIM eligibility) as spoke nodes grouped into color-coded
         columns, connected back to the hub with curved lines.
 
+        If the blast radius object carries a dynamic group's MembershipRule,
+        it is drawn as its own box wired to the hub, so the diagram shows not
+        just what depends on the group but why members end up in it.
+
+        Passing -ExampleUser additionally draws a sample user node wired to
+        the hub, evaluated against the membership rule (via
+        Test-EGIRuleTreeNode) and colored green/red depending on whether that
+        user would match - a concrete "would this person be a member"
+        illustration next to the abstract rule text.
+
         The output is a plain, self-contained .svg file - no external tools or
         libraries required. Open it directly in a browser, embed it in a wiki
         page, or attach it to a change-ticket as evidence of the blast radius
@@ -23,8 +33,20 @@ function Export-EGIGroupBlastRadiusSvg {
     .PARAMETER Path
         Output file path, e.g. './reports/sales-de-blast-radius.svg'.
 
+    .PARAMETER ExampleUser
+        Optional sample user object ([pscustomobject] or hashtable, e.g. from
+        Get-MgUser) drawn as its own node and checked against
+        $BlastRadius.MembershipRule to illustrate whether that user would be
+        a member. Property names must match the Graph attribute names used in
+        the rule (department, jobTitle, country, ...), case-insensitive.
+
     .EXAMPLE
         Get-EGIGroupBlastRadius -GroupId $id | Export-EGIGroupBlastRadiusSvg -Path './report.svg'
+
+    .EXAMPLE
+        $exampleUser = [pscustomobject]@{ DisplayName = 'Alice Nguyen'; department = 'Sales'; country = 'DE' }
+        Get-EGIGroupBlastRadius -GroupId $id |
+            Export-EGIGroupBlastRadiusSvg -Path './report.svg' -ExampleUser $exampleUser
     #>
     [CmdletBinding()]
     param(
@@ -32,7 +54,9 @@ function Export-EGIGroupBlastRadiusSvg {
         [pscustomobject] $BlastRadius,
 
         [Parameter(Mandatory)]
-        [string] $Path
+        [string] $Path,
+
+        [object] $ExampleUser
     )
 
     begin {
@@ -85,23 +109,98 @@ function Export-EGIGroupBlastRadiusSvg {
         $topMargin  = 60
         $hubWidth   = 220
         $hubHeight  = 70
+        $hubX       = 20
+        $stackGap   = 20
 
         $colX = @(0..3) | ForEach-Object { 340 + $_ * ($colWidth + $colGap) }
 
         $maxItemsInAnyColumn = ($categories | ForEach-Object { [Math]::Max($_.Items.Count, 1) } | Measure-Object -Maximum).Maximum
-        $height = [Math]::Max(($maxItemsInAnyColumn * ($itemHeight + $itemGap)) + $topMargin + 80, 260)
         $width = 340 + (4 * ($colWidth + $colGap))
-
-        $hubY = [Math]::Round($height / 2 - $hubHeight / 2)
-        $hubX = 20
-        $hubCenterY = $hubY + ($hubHeight / 2)
-        $hubRightEdgeX = $hubX + $hubWidth
 
         function ConvertTo-SafeXml {
             param([string] $Text)
             if ($null -eq $Text) { return '' }
             return [System.Security.SecurityElement]::Escape($Text)
         }
+
+        function Get-EGIWrappedLines {
+            param([string] $Text, [int] $MaxCharsPerLine = 40, [int] $MaxLines = 6)
+            $words = $Text -split '\s+'
+            $lines = [System.Collections.Generic.List[string]]::new()
+            $current = ''
+            foreach ($word in $words) {
+                $candidate = if ($current) { "$current $word" } else { $word }
+                if ($candidate.Length -gt $MaxCharsPerLine -and $current) {
+                    $lines.Add($current)
+                    $current = $word
+                }
+                else {
+                    $current = $candidate
+                }
+            }
+            if ($current) { $lines.Add($current) }
+            if ($lines.Count -gt $MaxLines) {
+                $lines = $lines[0..($MaxLines - 1)]
+                $lines[$MaxLines - 1] = $lines[$MaxLines - 1] + ' ...'
+            }
+            return $lines
+        }
+
+        # ---- Membership rule box (below the hub) ------------------------------
+        $ruleLines = @()
+        if (-not [string]::IsNullOrWhiteSpace($BlastRadius.MembershipRule)) {
+            $ruleLines = @(Get-EGIWrappedLines -Text $BlastRadius.MembershipRule)
+        }
+        $ruleBoxWidth  = 300
+        $ruleLineHeight = 16
+        $ruleBoxHeight = if ($ruleLines.Count -gt 0) { 34 + ($ruleLines.Count * $ruleLineHeight) } else { 0 }
+
+        # ---- Example user box (above the hub) ---------------------------------
+        $exampleName      = $null
+        $examplePropLines = @()
+        $exampleMatches   = $null
+        $exampleError     = $null
+        if ($ExampleUser) {
+            $exampleName = Get-EGIUserProperty -Obj $ExampleUser -Name 'DisplayName'
+            if ([string]::IsNullOrWhiteSpace($exampleName)) { $exampleName = 'Example user' }
+
+            $propNames = if ($ExampleUser -is [System.Collections.IDictionary]) { @($ExampleUser.Keys) } else { @($ExampleUser.PSObject.Properties.Name) }
+            $propNames = @($propNames | Where-Object { $_ -notin @('Id', 'DisplayName') } | Select-Object -First 3)
+            $examplePropLines = @(foreach ($p in $propNames) { "$p`: $(Get-EGIUserProperty -Obj $ExampleUser -Name $p)" })
+
+            if (-not [string]::IsNullOrWhiteSpace($BlastRadius.MembershipRule)) {
+                try {
+                    $exampleTree = ConvertFrom-EGIRuleString -Rule $BlastRadius.MembershipRule
+                    $exampleMatches = [bool](Test-EGIRuleTreeNode -Node $exampleTree -User $ExampleUser)
+                }
+                catch {
+                    $exampleError = $_.Exception.Message
+                }
+            }
+        }
+        $userBoxWidth  = 220
+        $userBoxHeight = if ($ExampleUser) { 40 + ($examplePropLines.Count * 15) + 20 } else { 0 }
+
+        # ---- Overall canvas + vertical hub/rule/user stack --------------------
+        $leftStackHeight = $hubHeight
+        if ($ExampleUser) { $leftStackHeight += $userBoxHeight + $stackGap }
+        if ($ruleBoxHeight -gt 0) { $leftStackHeight += $ruleBoxHeight + $stackGap }
+
+        $height = [Math]::Max(
+            [Math]::Max(($maxItemsInAnyColumn * ($itemHeight + $itemGap)) + $topMargin + 80, 260),
+            $leftStackHeight + $topMargin + 40
+        )
+
+        $stackStartY = [Math]::Max(60, [Math]::Round(($height - $leftStackHeight) / 2))
+        $cursorY = $stackStartY
+        $userBoxY = $cursorY
+        if ($ExampleUser) { $cursorY += $userBoxHeight + $stackGap }
+        $hubY = $cursorY
+        $cursorY += $hubHeight + $stackGap
+        $ruleBoxY = $cursorY
+
+        $hubCenterY = $hubY + ($hubHeight / 2)
+        $hubRightEdgeX = $hubX + $hubWidth
 
         $sb = [System.Text.StringBuilder]::new()
         [void]$sb.AppendLine("<svg xmlns=`"http://www.w3.org/2000/svg`" viewBox=`"0 0 $width $height`" font-family=`"Segoe UI, Arial, sans-serif`">")
@@ -123,6 +222,41 @@ function Export-EGIGroupBlastRadiusSvg {
         [void]$sb.AppendLine("<rect x=`"$hubX`" y=`"$hubY`" width=`"$hubWidth`" height=`"$hubHeight`" rx=`"10`" fill=`"#eef2ff`" stroke=`"#4338ca`" stroke-width=`"1.5`"/>")
         [void]$sb.AppendLine("<text x=`"$($hubX + $hubWidth/2)`" y=`"$($hubY + $hubHeight/2 - 4)`" text-anchor=`"middle`" font-size=`"13`" font-weight=`"600`" fill=`"#312e81`">$(ConvertTo-SafeXml $BlastRadius.DisplayName)</text>")
         [void]$sb.AppendLine("<text x=`"$($hubX + $hubWidth/2)`" y=`"$($hubY + $hubHeight/2 + 16)`" text-anchor=`"middle`" font-size=`"11`" fill=`"#4338ca`">Dynamic group</text>")
+
+        # Membership rule box (below the hub)
+        if ($ruleBoxHeight -gt 0) {
+            $hubBottomCenterX = $hubX + $hubWidth / 2
+            [void]$sb.AppendLine("<path d=`"M $hubBottomCenterX $($hubY + $hubHeight) L $hubBottomCenterX $ruleBoxY`" fill=`"none`" stroke=`"#b45309`" stroke-width=`"1.5`"/>")
+            [void]$sb.AppendLine("<rect x=`"$hubX`" y=`"$ruleBoxY`" width=`"$ruleBoxWidth`" height=`"$ruleBoxHeight`" rx=`"8`" fill=`"#fffbeb`" stroke=`"#b45309`" stroke-width=`"1.5`"/>")
+            $ruleTextX = $hubX + 12
+            $ruleTextY = $ruleBoxY + 20
+            [void]$sb.AppendLine("<text x=`"$ruleTextX`" y=`"$ruleTextY`" font-size=`"12`" font-weight=`"600`" fill=`"#92400e`">Membership rule</text>")
+            $ruleTextY += 18
+            foreach ($line in $ruleLines) {
+                [void]$sb.AppendLine("<text x=`"$ruleTextX`" y=`"$ruleTextY`" font-size=`"11`" font-family=`"Consolas, monospace`" fill=`"#78350f`">$(ConvertTo-SafeXml $line)</text>")
+                $ruleTextY += $ruleLineHeight
+            }
+        }
+
+        # Example user node (above the hub), checked against the membership rule
+        if ($ExampleUser) {
+            $userColor = if ($exampleError) { '#6b7280' } elseif ($exampleMatches -eq $true) { '#16a34a' } elseif ($exampleMatches -eq $false) { '#dc2626' } else { '#6b7280' }
+            $userFill = if ($exampleError) { '#f9fafb' } elseif ($exampleMatches -eq $true) { '#f0fdf4' } elseif ($exampleMatches -eq $false) { '#fef2f2' } else { '#f9fafb' }
+            $userCenterX = $hubX + $userBoxWidth / 2
+
+            [void]$sb.AppendLine("<rect x=`"$hubX`" y=`"$userBoxY`" width=`"$userBoxWidth`" height=`"$userBoxHeight`" rx=`"10`" fill=`"$userFill`" stroke=`"$userColor`" stroke-width=`"1.5`"/>")
+            $nameY = $userBoxY + 20
+            [void]$sb.AppendLine("<text x=`"$userCenterX`" y=`"$nameY`" text-anchor=`"middle`" font-size=`"13`" font-weight=`"600`" fill=`"#111827`">$(ConvertTo-SafeXml $exampleName)</text>")
+            $propTextY = $nameY + 17
+            foreach ($line in $examplePropLines) {
+                [void]$sb.AppendLine("<text x=`"$userCenterX`" y=`"$propTextY`" text-anchor=`"middle`" font-size=`"11`" fill=`"#374151`">$(ConvertTo-SafeXml $line)</text>")
+                $propTextY += 15
+            }
+            $verdict = if ($exampleError) { "Rule error: $exampleError" } elseif ($exampleMatches -eq $true) { 'Matches rule' } elseif ($exampleMatches -eq $false) { 'Does not match rule' } else { 'Example user' }
+            [void]$sb.AppendLine("<text x=`"$userCenterX`" y=`"$($userBoxY + $userBoxHeight - 8)`" text-anchor=`"middle`" font-size=`"11`" font-weight=`"600`" fill=`"$userColor`">$(ConvertTo-SafeXml $verdict)</text>")
+
+            [void]$sb.AppendLine("<path d=`"M $userCenterX $($userBoxY + $userBoxHeight) L $userCenterX $hubY`" fill=`"none`" stroke=`"$userColor`" stroke-width=`"1.5`" stroke-dasharray=`"4,3`"/>")
+        }
 
         for ($c = 0; $c -lt $categories.Count; $c++) {
             $cat = $categories[$c]
