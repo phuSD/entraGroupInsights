@@ -1,10 +1,10 @@
 @{
     RootModule        = 'EntraGroupInsights.psm1'
-    ModuleVersion     = '0.1.2'
+    ModuleVersion     = '1.0.0'
     GUID              = 'e938a2fe-9488-4b2b-a1d4-571d37b33334'
     Author            = 'Pascal Huber'
     Copyright         = '(c) Pascal Huber. All rights reserved.'
-    Description       = 'Visualizes and analyzes Microsoft Entra ID dynamic group rules: rule-tree parsing, at-scale membership simulation, snapshot/diff versioning, and blast-radius mapping (Conditional Access, license, app role, and PIM dependencies) for a given group.'
+    Description       = 'Visualizes and de-risks Microsoft Entra ID dynamic group rules: rule-tree parsing, at-scale membership simulation, snapshot/diff versioning, and blast-radius mapping (Conditional Access, license, app role, and PIM dependencies - including inheritance through nested/parent groups and rule-based memberOf references) for a given group, with an SVG relationship report and example-user "would they match" illustration.'
     PowerShellVersion    = '5.1'
     CompatiblePSEditions = @('Desktop', 'Core')
 
@@ -32,7 +32,7 @@
             Tags         = @('Entra', 'EntraID', 'AzureAD', 'IdentityGovernance', 'ConditionalAccess', 'DynamicGroups', 'MicrosoftGraph', 'Security')
             LicenseUri   = 'https://github.com/phuSD/EntraGroupInsights/blob/main/LICENSE'
             ProjectUri   = 'https://github.com/phuSD/EntraGroupInsights'
-            ReleaseNotes = '0.1.2: rule-engine hardening (wildcard values compared literally, extension_* attributes, quoted commas in -in lists, warning on ambiguous -and/-or mixes), leaf compilation cache for bulk simulation, -PassThru returns the original user objects, advanced-query headers for snapshot export, blast-radius count/risk fixes, BOM-less UTF-8 output.'
+            ReleaseNotes = '1.0.0: first stable release. Rule-tree parsing and bulk membership simulation for the common comparison operators, blast-radius mapping (Conditional Access, license, app role, and PIM dependencies) now including inheritance through nested/parent groups and rule-based memberOf references, a self-contained SVG relationship report with optional example-user match illustration, and JSON snapshot/diff for change tracking. See README Limitations for what is intentionally out of scope (Direct Reports rules, employeeHireDate date-math, and the general -and/-or precedence caveat).'
         }
     }
 }

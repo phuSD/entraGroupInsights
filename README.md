@@ -8,7 +8,7 @@ Visualizes and de-risks Microsoft Entra ID **dynamic group** rules:
 - **SVG relationship report** — render a group's blast radius as a standalone, shareable diagram
 - **Snapshot/diff versioning** — export dynamic group rules to JSON, commit to Git, diff between runs
 
-This is a v0.1 prototype. See [Limitations](#limitations) before relying on it for production decisions.
+See [Limitations](#limitations) before relying on it for production decisions.
 
 ## Prerequisites
 
