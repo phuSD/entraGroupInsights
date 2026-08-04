@@ -6,8 +6,14 @@ function Export-EGIGroupBlastRadiusSvg {
     .DESCRIPTION
         Draws the group as a hub node in the center-left, and every downstream
         dependency (Conditional Access policies, license SKUs, app role
-        assignments, PIM eligibility) as spoke nodes grouped into color-coded
-        columns, connected back to the hub with curved lines.
+        assignments, PIM eligibility, structural parent/child group nesting,
+        groups referenced by this group's memberOf rule clause, and other
+        dynamic groups that reference this group the same way) as spoke
+        nodes grouped into color-coded columns, connected back to the hub
+        with curved lines. Conditional Access, license, and app role entries
+        inherited through a parent group (rather than referencing this group
+        directly) are labeled with where they actually come from, e.g.
+        "(Nested via 'Contoso-EU')".
 
         If the blast radius object carries a dynamic group's MembershipRule,
         it is drawn as its own box wired to the hub, so the diagram shows not
@@ -112,23 +118,33 @@ function Export-EGIGroupBlastRadiusSvg {
         }
 
         # ---- Build the category list ---------------------------------------
+        function Format-EGISourceSuffix {
+            param([string] $Source)
+            if ($Source -and $Source -ne 'Direct') { return '  ' + ($Source -replace '^Nested ', '') }
+            return ''
+        }
+
         $categories = @(
             [pscustomobject]@{
                 Name  = 'Conditional Access'
                 Color = '#2563eb'
                 Items = @($BlastRadius.ConditionalAccessPolicies | ForEach-Object {
-                        "$($_.DisplayName)  [$($_.Reference) / $($_.State)]"
+                        "$($_.DisplayName)  [$($_.Reference) / $($_.State)]$(Format-EGISourceSuffix $_.Source)"
                     })
             }
             [pscustomobject]@{
                 Name  = 'Licenses'
                 Color = '#16a34a'
-                Items = @($BlastRadius.AssignedLicenseSkuIds)
+                Items = @($BlastRadius.AssignedLicenses | ForEach-Object {
+                        "$($_.SkuId)$(Format-EGISourceSuffix $_.Source)"
+                    })
             }
             [pscustomobject]@{
                 Name  = 'App role assignments'
                 Color = '#d97706'
-                Items = @($BlastRadius.AppRoleAssignments | ForEach-Object { $_.resourceDisplayName })
+                Items = @($BlastRadius.AppRoleAssignments | ForEach-Object {
+                        "$($_.resourceDisplayName)$(Format-EGISourceSuffix $_.Source)"
+                    })
             }
             [pscustomobject]@{
                 Name  = 'PIM eligibility'
@@ -137,10 +153,30 @@ function Export-EGIGroupBlastRadiusSvg {
                         "$($BlastRadius.PimEligibleRoleCount) eligible role assignment(s)"
                     })
             }
+            [pscustomobject]@{
+                Name  = 'Nested in (parent groups)'
+                Color = '#7c3aed'
+                Items = @($BlastRadius.ParentGroups | ForEach-Object { $_.displayName })
+            }
+            [pscustomobject]@{
+                Name  = 'Contains (nested groups)'
+                Color = '#0891b2'
+                Items = @($BlastRadius.ChildGroups | ForEach-Object { $_.displayName })
+            }
+            [pscustomobject]@{
+                Name  = 'Rule references (memberOf)'
+                Color = '#be185d'
+                Items = @($BlastRadius.RuleReferencedGroups | ForEach-Object { $_.displayName })
+            }
+            [pscustomobject]@{
+                Name  = 'Referenced by (memberOf)'
+                Color = '#c026d3'
+                Items = @($BlastRadius.RuleReferencedByGroups | ForEach-Object { $_.displayName })
+            }
         )
 
         # ---- Layout constants ------------------------------------------------
-        $colWidth   = 260
+        $colWidth   = 300
         $colGap     = 60
         $itemHeight = 34
         $itemGap    = 10
@@ -150,10 +186,10 @@ function Export-EGIGroupBlastRadiusSvg {
         $hubX       = 20
         $stackGap   = 20
 
-        $colX = @(0..3) | ForEach-Object { 340 + $_ * ($colWidth + $colGap) }
+        $colX = @(0..($categories.Count - 1)) | ForEach-Object { 340 + $_ * ($colWidth + $colGap) }
 
         $maxItemsInAnyColumn = ($categories | ForEach-Object { [Math]::Max($_.Items.Count, 1) } | Measure-Object -Maximum).Maximum
-        $width = 340 + (4 * ($colWidth + $colGap))
+        $width = 340 + ($categories.Count * ($colWidth + $colGap))
 
         function ConvertTo-SafeXml {
             param([string] $Text)
@@ -310,7 +346,7 @@ function Export-EGIGroupBlastRadiusSvg {
             for ($r = 0; $r -lt $cat.Items.Count; $r++) {
                 $y = $topMargin + $r * ($itemHeight + $itemGap)
                 $labelRaw = [string]$cat.Items[$r]
-                if ($labelRaw.Length -gt 34) { $labelRaw = $labelRaw.Substring(0, 31) + '...' }
+                if ($labelRaw.Length -gt 40) { $labelRaw = $labelRaw.Substring(0, 37) + '...' }
                 $label = ConvertTo-SafeXml $labelRaw
 
                 $itemCenterY = $y + ($itemHeight / 2)
