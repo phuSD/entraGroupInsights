@@ -10,8 +10,12 @@ BeforeAll {
         IsRoleAssignable          = $false
         IsTeamsGroup              = $false
         MembershipRule            = '(user.department -eq "Sales") -and (user.country -eq "DE")'
+        ParentGroups              = @()
+        ChildGroups               = @()
+        RuleReferencedGroups      = @()
+        RuleReferencedByGroups    = @()
         ConditionalAccessPolicies = @()
-        AssignedLicenseSkuIds     = @()
+        AssignedLicenses          = @()
         AppRoleAssignments        = @()
         PimEligibleRoleCount      = 0
         TotalDependencyCount      = 0
@@ -113,6 +117,93 @@ Describe 'Export-EGIGroupBlastRadiusSvg' {
 
             $svg | Should -Match 'Bob Fischer'
             $svg | Should -Match 'Does not match rule'
+        }
+    }
+
+    Context 'nested group columns' {
+
+        BeforeAll {
+            $script:nestedBlastRadius = [pscustomobject]@{
+                GroupId                   = '11111111-2222-3333-4444-555555555555'
+                DisplayName               = 'Sales-DE-Dynamic'
+                IsRoleAssignable          = $false
+                IsTeamsGroup              = $false
+                MembershipRule            = '(user.department -eq "Sales") -and (user.country -eq "DE")'
+                ParentGroups              = @([pscustomobject]@{ id = 'p1'; displayName = 'EU-AllStaff' })
+                ChildGroups               = @([pscustomobject]@{ id = 'c1'; displayName = 'Sales-DE-VIP' })
+                ConditionalAccessPolicies = @(
+                    [pscustomobject]@{ DisplayName = 'Require MFA EU'; State = 'enabled'; Reference = 'Include'; Source = "Nested via 'EU-AllStaff'" }
+                )
+                AssignedLicenses          = @(
+                    [pscustomobject]@{ SkuId = 'sku-eu-123'; Source = "Nested via 'EU-AllStaff'" }
+                )
+                AppRoleAssignments        = @(
+                    [pscustomobject]@{ resourceDisplayName = 'Salesforce'; appRoleId = 'role-1'; Source = "Nested via 'EU-AllStaff'" }
+                )
+                PimEligibleRoleCount      = 0
+                TotalDependencyCount      = 3
+                RiskLevel                 = 'Critical'
+            }
+        }
+
+        It 'draws parent and child group columns' {
+            $path = Join-Path $TestDrive 'nested.svg'
+            $script:nestedBlastRadius | Export-EGIGroupBlastRadiusSvg -Path $path
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match 'Nested in \(parent groups\)'
+            $svg | Should -Match 'EU-AllStaff'
+            $svg | Should -Match 'Contains \(nested groups\)'
+            $svg | Should -Match 'Sales-DE-VIP'
+        }
+
+        It 'labels inherited Conditional Access, license, and app role entries with their source group' {
+            $path = Join-Path $TestDrive 'nested-sources.svg'
+            $script:nestedBlastRadius | Export-EGIGroupBlastRadiusSvg -Path $path
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match "via &apos;EU-AllStaff&apos;"
+        }
+
+        It 'produces well-formed XML with the extra columns' {
+            $path = Join-Path $TestDrive 'nested-wellformed.svg'
+            $script:nestedBlastRadius | Export-EGIGroupBlastRadiusSvg -Path $path
+
+            { [xml](Get-Content -LiteralPath $path -Raw) } | Should -Not -Throw
+        }
+    }
+
+    Context 'memberOf rule-reference column' {
+
+        It 'draws groups referenced by a memberOf rule clause' {
+            $ruleReferenced = $script:blastRadius | Select-Object * -ExcludeProperty RuleReferencedGroups
+            $ruleReferenced | Add-Member -NotePropertyName RuleReferencedGroups -NotePropertyValue @(
+                [pscustomobject]@{ id = 'd1'; displayName = 'VendorX-Contractors' }
+            )
+
+            $path = Join-Path $TestDrive 'memberof.svg'
+            $ruleReferenced | Export-EGIGroupBlastRadiusSvg -Path $path
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match 'Rule references \(memberOf\)'
+            $svg | Should -Match 'VendorX-Contractors'
+        }
+    }
+
+    Context 'memberOf reverse rule-reference column' {
+
+        It 'draws other dynamic groups whose rule references this group' {
+            $referencedBy = $script:blastRadius | Select-Object * -ExcludeProperty RuleReferencedByGroups
+            $referencedBy | Add-Member -NotePropertyName RuleReferencedByGroups -NotePropertyValue @(
+                [pscustomobject]@{ id = 'a1'; displayName = 'Contractors-AllOf-VendorX' }
+            )
+
+            $path = Join-Path $TestDrive 'memberof-reverse.svg'
+            $referencedBy | Export-EGIGroupBlastRadiusSvg -Path $path
+            $svg = Get-Content -LiteralPath $path -Raw
+
+            $svg | Should -Match 'Referenced by \(memberOf\)'
+            $svg | Should -Match 'Contractors-AllOf-VendorX'
         }
     }
 }
